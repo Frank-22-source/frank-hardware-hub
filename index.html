@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <title>Frank Hardware Hub - Desktop POS & Update Simulation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #eef2f3; }
+        .box { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 900px; margin: 0 auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        .alert { background-color: #ffcccc; color: #cc0000; font-weight: bold; padding: 5px; border-radius: 4px; }
+        .safe { background-color: #d4edda; color: #155724; padding: 5px; border-radius: 4px; }
+        .btn { background:#28a745; color:white; border:none; padding:6px 12px; cursor:pointer; border-radius:3px; font-weight: bold; }
+        .btn-blue { background:#007bff; color:white; border:none; padding:6px 12px; cursor:pointer; border-radius:3px; }
+        .receipt { margin-top: 20px; padding: 15px; background: #e9ecef; border-left: 5px solid #28a745; display: none; }
+        .update-section { margin-top: 30px; padding: 20px; background: #f8f9fa; border: 1px dashed #007bff; border-radius: 5px; }
+        .form-group { margin-bottom: 10px; }
+        label { display: inline-block; width: 150px; font-weight: bold; }
+        select, input { padding: 6px; width: 200px; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>Frank Hardware Hub — Desktop POS Simulation</h2>
+    <p>Mfumo huu sasa unahifadhi kumbukumbu hata ukifunga kivinjari (LocalStorage)!</p>
+   
+    <table>
+        <thead>
+            <tr>
+                <th>Bidhaa</th>
+                <th>Stock (Stoo)</th>
+                <th>Bei ya Kuuzia (Tsh)</th>
+                <th>Hali (Alert)</th>
+                <th>Kitendo cha Mauzo</th>
+            </tr>
+        </thead>
+        <tbody id="product-table">
+            </tbody>
+    </table>
+
+    <div id="receipt-zone" class="receipt"></div>
+
+    <div class="update-section">
+        <h3>🔧 Jiko la Kusimamia Stoo — Ku-update Bidhaa</h3>
+        <p style="color: #666; font-size: 13px;">Tumia sehemu hii kuongeza mzigo mpya ukiingia au kubadilisha bei mtaani:</p>
+       
+        <div class="form-group">
+            <label>Chagua Bidhaa:</label>
+            <select id="update-select">
+                </select>
+        </div>
+       
+        <div class="form-group">
+            <label>Jaza Stock Mpya:</label>
+            <input type="number" id="update-stock" placeholder="Mfano: 150">
+        </div>
+
+        <div class="form-group">
+            <label>Badili Bei ya Kuuzia:</label>
+            <input type="number" id="update-price" placeholder="Mfano: 19000">
+        </div>
+
+        <button class="btn-blue" onclick="updateProductData()">Okoa Mabadiliko (Update)</button>
+    </div>
+</div>
+
+<script>
+// Data ya kwanza kabisa (Inasomwa mara ya kwanza tu duka likiwa jipya)
+const defaultProducts = [
+    { id: 101, jina: 'Saruji (Mbeya Cement)', stock: 100, bei_nunua: 16000, bei_uza: 18500, alert_level: 15 },
+    { id: 102, jina: 'Nondo (8mm)', stock: 50, bei_nunua: 14000, bei_uza: 16000, alert_level: 10 },
+    { id: 103, jina: 'Rangi ya Ukutani', stock: 20, bei_nunua: 45000, bei_uza: 52000, alert_level: 5 }
+];
+
+// Mfumo wa kumbukumbu ya kudumu: unapakia data iliyohifadhiwa, isipokuwepo unachukua default
+let products = JSON.parse(localStorage.getItem('hardware_stock')) || defaultProducts;
+
+function renderTable() {
+    let html = '';
+    let selectHtml = '';
+   
+    products.forEach((p, index) => {
+        // Angalia kama stock ipo chini ya alert level
+        let status = p.stock <= p.alert_level ?
+            `<span class="alert">AGIZA MZIGO MPYA!</span>` :
+            `<span class="safe">Mzigo Upo</span>`;
+           
+        // Jaza Jedwali la mauzo
+        html += `<tr>
+            <td>${p.jina}</td>
+            <td><strong>${p.stock}</strong></td>
+            <td>${p.bei_uza.toLocaleString()}</td>
+            <td>${status}</td>
+            <td>
+                <input type="number" id="qty-${index}" min="1" max="${p.stock}" placeholder="Idadi" style="width:60px; padding:4px;">
+                <button class="btn" onclick="sellItem(${index})">Uza</button>
+            </td>
+        </tr>`;
+
+        // Jaza menu ya kuchagua bidhaa kwenye fomu ya update
+        selectHtml += `<option value="${index}">${p.jina}</option>`;
+    });
+   
+    document.getElementById('product-table').innerHTML = html;
+    document.getElementById('update-select').innerHTML = selectHtml;
+}
+
+// 1. Mfumo wa Kufanya Mauzo (POS)
+function sellItem(index) {
+    let p = products[index];
+    let qtyInput = document.getElementById(`qty-${index}`);
+    let qty = parseInt(qtyInput.value);
+
+    if (isNaN(qty) || qty <= 0 || qty > p.stock) {
+        alert("Tafadhali ingiza idadi sahihi ya kuuza!");
+        return;
+    }
+
+    let jumla_mauzo = p.bei_uza * qty;
+    let faida = (p.bei_uza - p.bei_nunua) * qty;
+
+    p.stock -= qty; // Punguza stock
+
+    // Hifadhi mabadiliko ya kudumu
+    saveToStorage();
+
+    // Onyesha risiti
+    let receiptZone = document.getElementById('receipt-zone');
+    receiptZone.style.display = 'block';
+    receiptZone.innerHTML = `
+        <h3>Transaction Successful!</h3>
+        <p>Bidhaa: <strong>${p.jina}</strong> | Idadi: <strong>${qty}</strong></p>
+        <p>Pesa Zilizopokelewa: <strong>Tsh ${jumla_mauzo.toLocaleString()}</strong></p>
+        <p>Faida Safi: <strong style="color:blue;">Tsh ${faida.toLocaleString()}</strong></p>
+    `;
+
+    qtyInput.value = '';
+    renderTable();
+}
+
+// 2. Mfumo wa Ku-update data (Kuweka Mzigo Mpya au Kubadili Bei)
+function updateProductData() {
+    let selectedIndex = document.getElementById('update-select').value;
+    let newStockInput = document.getElementById('update-stock').value;
+    let newPriceInput = document.getElementById('update-price').value;
+   
+    let p = products[selectedIndex];
+    let badiliko = false;
+
+    // Kama amejaza stock mpya, i-update
+    if (newStockInput !== '') {
+        p.stock = parseInt(newStockInput);
+        badiliko = true;
+    }
+
+    // Kama amejaza bei mpya, i-update
+    if (newPriceInput !== '') {
+        p.bei_uza = parseFloat(newPriceInput);
+        badiliko = true;
+    }
+
+    if (badiliko) {
+        saveToStorage(); // Hifadhi kwenye kompyuta ya kudumu
+        renderTable();    // Refresh jedwali kuonyesha namba mpya
+        alert(`Mabadiliko ya ${p.jina} yamefanikiwa kwa usahihi!`);
+       
+        // Safisha visanduku vya fomu
+        document.getElementById('update-stock').value = '';
+        document.getElementById('update-price').value = '';
+    } else {
+        alert("Tafadhali jaza idadi ya stock au bei unayotaka ku-update!");
+    }
+}
+
+// Kazi ya kuhifadhi kwenye memory ya Chrome (LocalStorage)
+function saveToStorage() {
+    localStorage.setItem('hardware_stock', JSON.stringify(products));
+}
+
+// Washa mfumo mara ya kwanza kabisa ukurasa ukifunguka
+renderTable();
+</script>
+
+</body>
+</html>
